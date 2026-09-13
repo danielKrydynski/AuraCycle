@@ -1,11 +1,24 @@
 /**
- * Client-side AES-256 GCM Web Crypto Implementation
- * All data is encrypted locally on-device. Zero data is sent to any server.
+ * @file crypto.ts
+ * @description Zero-knowledge, client-side cryptographic engine powered by the browser's
+ * native Web Crypto API (`window.crypto.subtle`).
+ *
+ * Security Architecture:
+ * - Cipher: AES-256-GCM (Galois/Counter Mode) providing both confidentiality and integrity authentication.
+ * - Key Derivation: PBKDF2 (Password-Based Key Derivation Function 2) with HMAC-SHA-256 and 100,000 iterations.
+ * - Initialization Vector (IV): Cryptographically secure random 12-byte (96-bit) IV generated fresh for every encryption.
+ * - Salt: Cryptographically secure random 16-byte (128-bit) salt per user vault to protect against rainbow table attacks.
+ * - Zero Remote Transmission: No keys, plaintexts, or ciphertexts are ever sent across a network.
  */
 
 import { EncryptedStore } from '../types';
 
-// Convert ArrayBuffer to Base64
+/**
+ * Encodes an ArrayBuffer into a standard Base64 string for persistent JSON storage.
+ *
+ * @param buffer - The raw binary ArrayBuffer to encode.
+ * @returns Standard Base64 encoded string.
+ */
 function bufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = '';
@@ -15,7 +28,12 @@ function bufferToBase64(buffer: ArrayBuffer): string {
   return window.btoa(binary);
 }
 
-// Convert Base64 to ArrayBuffer
+/**
+ * Decodes a standard Base64 string back into an ArrayBuffer for Web Crypto API operations.
+ *
+ * @param base64 - Base64 string to decode.
+ * @returns Binary ArrayBuffer containing the decoded bytes.
+ */
 function base64ToBuffer(base64: string): ArrayBuffer {
   const binary = window.atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -25,9 +43,16 @@ function base64ToBuffer(base64: string): ArrayBuffer {
   return bytes.buffer;
 }
 
-// Derive AES-GCM 256-bit key from a passcode/PIN and salt using PBKDF2
+/**
+ * Derives a 256-bit AES-GCM CryptoKey from a user passcode/PIN using PBKDF2.
+ *
+ * @param pin - The user-provided passcode or auto-generated device key.
+ * @param saltBuffer - 16-byte cryptographic salt buffer.
+ * @returns A CryptoKey suitable for AES-GCM encryption and decryption.
+ */
 export async function deriveKey(pin: string, saltBuffer: ArrayBuffer): Promise<CryptoKey> {
   const enc = new TextEncoder();
+  // Import the raw PIN as key material for PBKDF2
   const keyMaterial = await window.crypto.subtle.importKey(
     'raw',
     enc.encode(pin),
@@ -36,6 +61,7 @@ export async function deriveKey(pin: string, saltBuffer: ArrayBuffer): Promise<C
     ['deriveKey']
   );
 
+  // Derive an AES-GCM 256-bit key with 100,000 SHA-256 rounds
   return window.crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
@@ -50,7 +76,13 @@ export async function deriveKey(pin: string, saltBuffer: ArrayBuffer): Promise<C
   );
 }
 
-// Hash PIN for fast verification check
+/**
+ * Computes a salted cryptographic hash of the passcode for rapid offline validation.
+ *
+ * @param pin - The user-provided passcode.
+ * @param saltBase64 - Base64-encoded salt string.
+ * @returns Base64-encoded 256-bit derived hash.
+ */
 export async function hashPin(pin: string, saltBase64: string): Promise<string> {
   const enc = new TextEncoder();
   const salt = base64ToBuffer(saltBase64);
@@ -76,15 +108,35 @@ export async function hashPin(pin: string, saltBase64: string): Promise<string> 
   return bufferToBase64(bits);
 }
 
-// Encrypt plaintext data using AES-GCM
-export async function encryptData(data: unknown, pin: string, existingSalt?: string): Promise<EncryptedStore> {
-  const saltBuffer = existingSalt ? base64ToBuffer(existingSalt) : window.crypto.getRandomValues(new Uint8Array(16)).buffer;
+/**
+ * Encrypts arbitrary serializable data using AES-256-GCM and packages it into an `EncryptedStore`.
+ *
+ * @param data - Any JSON-serializable object (typically `AppData`).
+ * @param pin - The passcode or device key used for key derivation.
+ * @param existingSalt - Optional existing salt to maintain derivation consistency across edits.
+ * @returns Promise resolving to the complete `EncryptedStore` structure with Base64 payloads.
+ */
+export async function encryptData(
+  data: unknown,
+  pin: string,
+  existingSalt?: string
+): Promise<EncryptedStore> {
+  // Use existing salt or generate 16 cryptographically secure random bytes
+  const saltBuffer = existingSalt
+    ? base64ToBuffer(existingSalt)
+    : window.crypto.getRandomValues(new Uint8Array(16)).buffer;
+
+  // Generate a fresh 12-byte (96-bit) IV for each encryption to ensure GCM security
   const iv = window.crypto.getRandomValues(new Uint8Array(12));
+
+  // Derive key via PBKDF2
   const key = await deriveKey(pin, saltBuffer);
 
+  // Serialize and encode payload
   const jsonString = JSON.stringify(data);
   const encodedData = new TextEncoder().encode(jsonString);
 
+  // Encrypt with AES-GCM (produces ciphertext + 128-bit authentication tag)
   const ciphertextBuffer = await window.crypto.subtle.encrypt(
     {
       name: 'AES-GCM',
@@ -103,7 +155,16 @@ export async function encryptData(data: unknown, pin: string, existingSalt?: str
   };
 }
 
-// Decrypt AES-GCM data using PIN. Throws error if PIN is invalid.
+/**
+ * Decrypts an `EncryptedStore` container using the provided passcode.
+ * Throws a DOMException (OperationError) if the passcode is incorrect or ciphertext has been tampered with.
+ *
+ * @template T - Expected type of the decrypted object.
+ * @param store - The `EncryptedStore` holding the salt, IV, and authenticated ciphertext.
+ * @param pin - Passcode or device key.
+ * @returns Promise resolving to the parsed data object of type `T`.
+ * @throws Error if key derivation or authentication tag verification fails.
+ */
 export async function decryptData<T = unknown>(store: EncryptedStore, pin: string): Promise<T> {
   const saltBuffer = base64ToBuffer(store.salt);
   const ivBuffer = base64ToBuffer(store.iv);
@@ -124,14 +185,25 @@ export async function decryptData<T = unknown>(store: EncryptedStore, pin: strin
   return JSON.parse(decodedString) as T;
 }
 
-// Generate a random high-entropy device key if user opts for no PIN
+/**
+ * Generates a high-entropy 192-bit (24-byte) random device key.
+ * Used when the user elects not to set a manual PIN while maintaining full AES-256 local encryption.
+ *
+ * @returns Base64-encoded device key string.
+ */
 export function generateDeviceKey(): string {
   const array = new Uint8Array(24);
   window.crypto.getRandomValues(array);
   return bufferToBase64(array.buffer);
 }
 
-// File export helper
+/**
+ * Triggers a secure client-side file download without server involvement.
+ *
+ * @param content - Text/string content to save.
+ * @param filename - Target filename (e.g. `cycle_vault_backup.json`).
+ * @param mimeType - MIME type header (default: `application/json`).
+ */
 export function downloadFile(content: string, filename: string, mimeType = 'application/json'): void {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);

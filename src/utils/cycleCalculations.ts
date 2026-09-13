@@ -1,5 +1,22 @@
+/**
+ * @file cycleCalculations.ts
+ * @description Core business logic and endocrinological calculations for menstrual cycle phase
+ * tracking, ovulation estimation, fertile window calculation, and symptom correlation.
+ *
+ * Biological Foundations:
+ * - Menstrual Phase (Days 1–5): Shedding of endometrium; low estrogen & progesterone.
+ * - Follicular Phase (Days 6–13): FSH recruitment of ovarian follicles; estradiol rises.
+ * - Ovulatory Phase (Days 14–16): Luteinizing Hormone (LH) surge releases mature ovum.
+ * - Luteal Phase (Days 17–28): Corpus luteum produces progesterone, triggering a ~0.4°–0.8°F
+ *   thermogenic basal body temperature elevation.
+ */
+
 import { AppData, CyclePeriod, CyclePhase, CycleStatus, PhaseDetails, DailyLog } from '../types';
 
+/**
+ * Educational, nutritional, physiological, and visual configuration for each of the four cycle phases.
+ * Uses an organic, high-contrast palette avoiding stereotypical pinks.
+ */
 export const PHASE_DETAILS: Record<CyclePhase, PhaseDetails> = {
   menstrual: {
     phase: 'menstrual',
@@ -83,7 +100,12 @@ export const PHASE_DETAILS: Record<CyclePhase, PhaseDetails> = {
   },
 };
 
-// Format date helper: YYYY-MM-DD
+/**
+ * Formats a JavaScript Date object into an ISO date string: `YYYY-MM-DD`.
+ *
+ * @param d - Date instance to format.
+ * @returns ISO date string.
+ */
 export function formatDate(d: Date): string {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -91,13 +113,24 @@ export function formatDate(d: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-// Parse YYYY-MM-DD to local Date
+/**
+ * Parses an ISO date string (`YYYY-MM-DD`) into a local Date object.
+ *
+ * @param dateStr - ISO formatted date string.
+ * @returns Date instance initialized to midnight local time.
+ */
 export function parseDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, m - 1, d);
 }
 
-// Difference in whole calendar days
+/**
+ * Calculates the number of whole calendar days between two Date instances.
+ *
+ * @param earlier - Start Date.
+ * @param later - End Date.
+ * @returns Integer number of elapsed days.
+ */
 export function daysBetween(earlier: Date, later: Date): number {
   const d1 = new Date(earlier.getFullYear(), earlier.getMonth(), earlier.getDate());
   const d2 = new Date(later.getFullYear(), later.getMonth(), later.getDate());
@@ -105,14 +138,33 @@ export function daysBetween(earlier: Date, later: Date): number {
   return Math.round(diffTime / (1000 * 60 * 60 * 24));
 }
 
-// Add days to a date string
+/**
+ * Adds an integer number of days to an ISO date string and returns the new `YYYY-MM-DD` string.
+ *
+ * @param dateStr - Base ISO date string.
+ * @param days - Number of days to add (or subtract if negative).
+ * @returns New ISO date string.
+ */
 export function addDays(dateStr: string, days: number): string {
   const d = parseDate(dateStr);
   d.setDate(d.getDate() + days);
   return formatDate(d);
 }
 
-// Compute cycle metrics & current status
+/**
+ * Computes real-time cycle status metrics, active biological phase, fertile window, and countdowns.
+ *
+ * Calculation methodology:
+ * 1. Finds the latest period start date.
+ * 2. Determines current cycle day = (days elapsed since period start) + 1.
+ * 3. Estimates ovulation at (avgCycleLength - 14) days based on the typical 14-day luteal phase duration.
+ * 4. Determines the biological fertile window (5 days prior to ovulation through 1 day post-ovulation,
+ *    accounting for ~5 day sperm viability and ~24h ovum viability).
+ *
+ * @param data - The complete unencrypted AppData object.
+ * @param referenceDate - Optional reference Date (defaults to current system time).
+ * @returns Complete `CycleStatus` object.
+ */
 export function calculateCycleStatus(data: AppData, referenceDate: Date = new Date()): CycleStatus {
   const periods = [...data.periods].sort((a, b) => b.startDate.localeCompare(a.startDate));
   const avgCycleLength = data.settings.avgCycleLength || 28;
@@ -188,7 +240,13 @@ export function calculateCycleStatus(data: AppData, referenceDate: Date = new Da
   };
 }
 
-// Calculate cycle day for a specific date relative to past periods
+/**
+ * Calculates the cycle day for a specific historical date relative to recorded periods.
+ *
+ * @param dateStr - Target date string (`YYYY-MM-DD`).
+ * @param periods - Array of recorded cycle periods.
+ * @returns 1-indexed cycle day number.
+ */
 export function getCycleDayForDate(dateStr: string, periods: CyclePeriod[]): number {
   if (periods.length === 0) return 1;
   const sorted = [...periods].sort((a, b) => b.startDate.localeCompare(a.startDate));
@@ -201,7 +259,14 @@ export function getCycleDayForDate(dateStr: string, periods: CyclePeriod[]): num
   return Math.max(1, daysBetween(start, target) + 1);
 }
 
-// Determine phase for any arbitrary cycle day given cycle parameters
+/**
+ * Maps an arbitrary cycle day to its corresponding biological cycle phase.
+ *
+ * @param cycleDay - Current day within the cycle (1 to cycleLength).
+ * @param cycleLength - Total cycle length in days (default: 28).
+ * @param periodLength - Flow duration in days (default: 5).
+ * @returns Identified `CyclePhase`.
+ */
 export function getPhaseForCycleDay(cycleDay: number, cycleLength = 28, periodLength = 5): CyclePhase {
   const ovulationDay = Math.max(10, cycleLength - 14);
   if (cycleDay <= periodLength) return 'menstrual';
@@ -210,17 +275,29 @@ export function getPhaseForCycleDay(cycleDay: number, cycleLength = 28, periodLe
   return 'luteal';
 }
 
-// Aggregate symptom frequencies by cycle phase
+/**
+ * Statistical aggregation of symptom occurrence grouped by menstrual cycle phase.
+ */
 export interface SymptomPhaseStats {
+  /** Internal symptom slug (e.g. 'cramps') */
   symptom: string;
+  /** Human-readable display label */
   label: string;
+  /** Occurrence count during Menstrual phase */
   menstrual: number;
+  /** Occurrence count during Follicular phase */
   follicular: number;
+  /** Occurrence count during Ovulatory phase */
   ovulatory: number;
+  /** Occurrence count during Luteal phase */
   luteal: number;
+  /** Total observed occurrences across all phases */
   total: number;
 }
 
+/**
+ * Human-friendly dictionary labels for physical hormonal symptoms.
+ */
 export const SYMPTOM_LABELS: Record<string, string> = {
   cramps: 'Cramps & Pelvic Pain',
   breast_tenderness: 'Breast Tenderness',
@@ -235,6 +312,9 @@ export const SYMPTOM_LABELS: Record<string, string> = {
   brain_fog: 'Brain Fog / Low Focus',
 };
 
+/**
+ * Human-friendly dictionary labels for emotional and mood states.
+ */
 export const MOOD_LABELS: Record<string, string> = {
   calm: 'Calm & Grounded',
   energized: 'High Energy & Confident',
@@ -246,6 +326,15 @@ export const MOOD_LABELS: Record<string, string> = {
   overwhelmed: 'Overwhelmed',
 };
 
+/**
+ * Aggregates symptom occurrence frequencies across all logged days and correlates them with biological phases.
+ * Allows users to identify hormonal symptom patterns (e.g. luteal PMS vs menstrual dysmenorrhea).
+ *
+ * @param logs - Daily log records dictionary.
+ * @param periods - Recorded period cycles.
+ * @param avgCycleLength - User's average cycle length in days (default: 28).
+ * @returns Array of `SymptomPhaseStats` sorted by total frequency in descending order.
+ */
 export function calculateSymptomPhaseCorrelations(
   logs: Record<string, DailyLog>,
   periods: CyclePeriod[],

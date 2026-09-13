@@ -1,3 +1,10 @@
+/**
+ * @file LockScreen.tsx
+ * @description Secure vault unlock and initial onboarding screen.
+ * Handles cryptographic authentication using PBKDF2 passcode verification or auto-generated device keys,
+ * and allows loading privacy-safe sample data for immediate exploration.
+ */
+
 import React, { useState } from 'react';
 import { ShieldCheck, Lock, KeyRound, Sparkles, AlertCircle, Eye, EyeOff } from 'lucide-react';
 

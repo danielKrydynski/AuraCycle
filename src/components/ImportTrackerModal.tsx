@@ -1,3 +1,11 @@
+/**
+ * @file ImportTrackerModal.tsx
+ * @description Ingestion dialog allowing users to import historical cycle and symptom data from
+ * external trackers (Clue, Flo, Apple Health, custom CSV/spreadsheets, and JSON backups).
+ * Features real-time format detection, pre-import data verification preview, sample CSV template download,
+ * and flexible merge vs replace strategies.
+ */
+
 import React, { useState, useRef } from 'react';
 import {
   X,

@@ -1,3 +1,10 @@
+/**
+ * @file seedData.ts
+ * @description Generates a physiologically accurate 75-day sample dataset with realistic
+ * biphasic BBT curves, cervical mucus progression, and phase-correlated symptoms for demonstration
+ * and testing without exposing any real personal user data.
+ */
+
 import { AppData, DailyLog, CyclePeriod } from '../types';
 import { formatDate, addDays } from '../utils/cycleCalculations';
 

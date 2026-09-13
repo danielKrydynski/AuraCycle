@@ -1,3 +1,9 @@
+/**
+ * @file CycleDial.tsx
+ * @description Radial SVG cycle dial visualization representing the 4 biological cycle phases,
+ * interactive day indicator, fertile window arc, and hormonal dynamics breakdown.
+ */
+
 import React from 'react';
 import { CyclePhase, CycleStatus, PhaseDetails } from '../types';
 import { PHASE_DETAILS } from '../utils/cycleCalculations';

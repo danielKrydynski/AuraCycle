@@ -1,3 +1,9 @@
+/**
+ * @file DailyLogModal.tsx
+ * @description Modal dialog for recording daily menstrual flow, basal body temperature,
+ * cervical fluid type, energy/stress ratings, physical symptoms, moods, sleep, and private notes.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { X, Calendar, Droplets, Thermometer, Moon, Zap, Smile, Activity, Trash2, Check } from 'lucide-react';
 import { DailyLog, FlowLevel, CervicalFluidType, LibidoLevel } from '../types';

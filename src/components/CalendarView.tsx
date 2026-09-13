@@ -1,3 +1,9 @@
+/**
+ * @file CalendarView.tsx
+ * @description Monthly calendar grid component displaying cycle day indices, phase highlights,
+ * period flow dots, fertile windows, basal body temperature pips, and daily inspection details.
+ */
+
 import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight, Droplets, Sparkles, Thermometer, Calendar as CalIcon, Edit3, Plus } from 'lucide-react';
 import { AppData, DailyLog, CyclePhase } from '../types';

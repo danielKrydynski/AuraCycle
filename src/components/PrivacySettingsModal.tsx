@@ -1,3 +1,14 @@
+/**
+ * @file PrivacySettingsModal.tsx
+ * @description Privacy and Security settings modal providing controls for:
+ * - Passcode / PIN setup, modification, and removal.
+ * - Auto-lock timers and inactivity policies.
+ * - AES-256-GCM encrypted backup export and file restoration.
+ * - Direct launcher for the Tracker Import Wizard.
+ * - Cycle parameter configuration (average cycle duration and period length).
+ * - Complete cryptographic vault purge (zero-trace erase).
+ */
+
 import React, { useState, useRef } from 'react';
 import {
   X,

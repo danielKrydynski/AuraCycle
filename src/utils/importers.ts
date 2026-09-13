@@ -1,24 +1,54 @@
+/**
+ * @file importers.ts
+ * @description Ingestion engine and heuristic parsers for importing cycle tracking data from
+ * external applications (Clue, Flo, Apple Health) and custom CSV/JSON spreadsheets.
+ *
+ * All parsing, cleaning, and period cycle reconstruction are executed 100% client-side in the
+ * browser sandbox before being encrypted into the user's local vault.
+ */
+
 import { AppData, CyclePeriod, DailyLog, FlowLevel, CervicalFluidType } from '../types';
 import { formatDate, addDays, daysBetween, parseDate } from './cycleCalculations';
 
+/**
+ * Recognized external tracker platforms and formats.
+ */
 export type TrackerSource = 'auto' | 'clue' | 'flo' | 'apple_health' | 'generic_csv' | 'json';
 
+/**
+ * Diagnostic summary computed prior to importing data into the vault.
+ */
 export interface ImportPreview {
+  /** Identified source platform */
   source: TrackerSource;
+  /** Total number of unique calendar days containing logs */
   totalDays: number;
+  /** Number of discrete multi-day menstrual cycles detected */
   totalPeriods: number;
+  /** Chronological start and end dates */
   dateRange: {
     start: string;
     end: string;
   };
+  /** Count of valid Basal Body Temperature measurements found */
   bbtCount: number;
+  /** Count of records with at least one physiological symptom */
   symptomCount: number;
+  /** Dictionary of parsed daily logs keyed by ISO date string */
   logs: Record<string, DailyLog>;
+  /** Reconstructed period objects */
   periods: CyclePeriod[];
+  /** Non-fatal informational warnings or notices */
   warnings: string[];
 }
 
-// Simple robust CSV parser handling quotes
+/**
+ * RFC 4180 compliant CSV parser supporting multi-line quoted fields, escaped double quotes,
+ * and mixed line endings (CRLF / LF).
+ *
+ * @param text - Raw CSV text content.
+ * @returns 2D array of string cells representing rows and columns.
+ */
 export function parseCSV(text: string): string[][] {
   const lines: string[][] = [];
   let currentRow: string[] = [];
@@ -64,17 +94,22 @@ export function parseCSV(text: string): string[][] {
   return lines;
 }
 
-// Normalize various date representations into YYYY-MM-DD
+/**
+ * Normalizes diverse date formats (ISO, MM/DD/YYYY, YYYY-MM-DD, timestamps) into standard `YYYY-MM-DD`.
+ *
+ * @param raw - Raw unparsed date string from external files.
+ * @returns Normalized ISO date string, or `null` if unparseable.
+ */
 export function normalizeDate(raw: string): string | null {
   if (!raw) return null;
   const clean = raw.trim().replace(/^"|"$/g, '');
 
-  // If already YYYY-MM-DD
+  // If already standard YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
     return clean;
   }
 
-  // If ISO string (e.g. 2024-05-12T14:30:00Z)
+  // If ISO 8601 string (e.g. 2024-05-12T14:30:00Z)
   if (/^\d{4}-\d{2}-\d{2}T/.test(clean)) {
     return clean.slice(0, 10);
   }
@@ -88,7 +123,7 @@ export function normalizeDate(raw: string): string | null {
     return `${y}-${m}-${d}`;
   }
 
-  // Try standard Date parse
+  // Fallback to standard JavaScript Date parser
   const parsed = new Date(clean);
   if (!isNaN(parsed.getTime())) {
     return formatDate(parsed);
@@ -97,7 +132,13 @@ export function normalizeDate(raw: string): string | null {
   return null;
 }
 
-// Normalize flow level
+/**
+ * Normalizes menstrual flow descriptions into standard `FlowLevel` enum.
+ * Maps values from Flo ("Heavy", "Medium"), Clue ("flowheavy", "flowmedium"), and numeric scales.
+ *
+ * @param raw - Raw string or numeric representation.
+ * @returns Standardized `FlowLevel` or undefined if not recognized.
+ */
 export function normalizeFlow(raw: string): FlowLevel | undefined {
   if (!raw) return undefined;
   const s = raw.toLowerCase().trim();
@@ -108,34 +149,44 @@ export function normalizeFlow(raw: string): FlowLevel | undefined {
   if (s.includes('light') || s === '1' || s.includes('flowlight')) return 'light';
   if (s === 'none' || s === 'no' || s === '0' || s === 'false') return 'none';
 
-  // If value is boolean or marked as period
+  // Boolean or period marker flags
   if (s === 'yes' || s === 'true' || s === 'period' || s.includes('period start')) return 'medium';
 
   return undefined;
 }
 
-// Normalize temperature
+/**
+ * Parses and converts temperature values into the user's preferred unit (°F or °C).
+ * Automatically detects whether raw number is Celsius (<45) or Fahrenheit (>90).
+ *
+ * @param val - Numeric or string temperature value (e.g., "97.4" or "36.4").
+ * @param userUnit - Target display unit ('F' | 'C').
+ * @returns Object with converted `bbt` number and associated unit.
+ */
 export function normalizeTemp(val: string | number, userUnit: 'F' | 'C'): { bbt?: number; unit: 'F' | 'C' } {
   const num = typeof val === 'number' ? val : parseFloat(val.toString().replace(/[^0-9.]/g, ''));
   if (isNaN(num) || num < 30 || num > 110) return { unit: userUnit };
 
-  // Heuristic: If < 45, it's Celsius; if > 90, it's Fahrenheit
+  // Heuristic: If < 45, it is Celsius; if > 90, it is Fahrenheit
   if (num < 45) {
     if (userUnit === 'F') {
-      // Convert to F
       return { bbt: +((num * 9) / 5 + 32).toFixed(2), unit: 'F' };
     }
     return { bbt: +num.toFixed(2), unit: 'C' };
   } else {
     if (userUnit === 'C') {
-      // Convert to C
       return { bbt: +(((num - 32) * 5) / 9).toFixed(2), unit: 'C' };
     }
     return { bbt: +num.toFixed(2), unit: 'F' };
   }
 }
 
-// Match keywords to symptoms
+/**
+ * Extracts recognized physical symptoms from freeform text or comma-delimited columns.
+ *
+ * @param text - Raw symptom string or serialized row text.
+ * @returns Array of unique internal symptom slugs (e.g. ['cramps', 'bloating']).
+ */
 export function extractSymptoms(text: string): string[] {
   if (!text) return [];
   const s = text.toLowerCase();
@@ -156,7 +207,12 @@ export function extractSymptoms(text: string): string[] {
   return Array.from(new Set(symptoms));
 }
 
-// Match moods
+/**
+ * Extracts recognized emotional states from text or mood columns.
+ *
+ * @param text - Raw mood string.
+ * @returns Array of recognized mood tags.
+ */
 export function extractMoods(text: string): string[] {
   if (!text) return [];
   const s = text.toLowerCase();
@@ -174,7 +230,12 @@ export function extractMoods(text: string): string[] {
   return Array.from(new Set(moods));
 }
 
-// Match cervical fluid
+/**
+ * Normalizes cervical fluid terminology into standard Fertility Awareness Method categories.
+ *
+ * @param text - Raw text description.
+ * @returns Standardized `CervicalFluidType` or undefined.
+ */
 export function normalizeCervicalFluid(text: string): CervicalFluidType | undefined {
   if (!text) return undefined;
   const s = text.toLowerCase();
@@ -186,7 +247,14 @@ export function normalizeCervicalFluid(text: string): CervicalFluidType | undefi
   return undefined;
 }
 
-// Reconstruct period cycles from individual daily flow logs
+/**
+ * Reconstructs discrete multi-day period episodes from daily bleeding logs.
+ * Clusters consecutive bleeding days into a single `CyclePeriod`. Allows up to a 2-day gap
+ * for mid-period cessation commonly observed in physiological flow.
+ *
+ * @param logs - Dictionary of daily logs.
+ * @returns Array of `CyclePeriod` objects sorted in descending chronological order.
+ */
 export function reconstructPeriodsFromLogs(logs: Record<string, DailyLog>): CyclePeriod[] {
   const sortedDates = Object.keys(logs)
     .filter((d) => logs[d].flow && logs[d].flow !== 'none')
@@ -204,7 +272,7 @@ export function reconstructPeriodsFromLogs(logs: Record<string, DailyLog>): Cycl
     const thisDate = parseDate(sortedDates[i]);
     const gap = daysBetween(prevDate, thisDate);
 
-    // If flow occurs within 2 days of previous flow day, consider it part of the same menstruation cycle
+    // If flow occurs within 2 days of previous flow day, cluster into same period
     if (gap <= 2) {
       currentEnd = sortedDates[i];
       const thisFlow = logs[sortedDates[i]].flow;
@@ -238,7 +306,15 @@ export function reconstructPeriodsFromLogs(logs: Record<string, DailyLog>): Cycl
   return periods.sort((a, b) => b.startDate.localeCompare(a.startDate));
 }
 
-// Main parser entry point supporting JSON & CSV formats
+/**
+ * Universal parser entry point capable of parsing JSON archives or CSV files.
+ * Automatically detects source vendor (Clue, Flo, Apple Health, AuraCycle, or custom CSV).
+ *
+ * @param rawContent - Full raw text content of the uploaded file.
+ * @param preferredUnit - User's preferred temperature scale ('F' | 'C').
+ * @returns Diagnostic `ImportPreview` ready for UI review and confirmation.
+ * @throws Error if file cannot be parsed or lacks date markers.
+ */
 export function parseTrackerData(rawContent: string, preferredUnit: 'F' | 'C' = 'F'): ImportPreview {
   const warnings: string[] = [];
   const logs: Record<string, DailyLog> = {};
@@ -346,7 +422,7 @@ export function parseTrackerData(rawContent: string, preferredUnit: 'F' | 'C' = 
       const tempVal = tempIdx >= 0 ? row[tempIdx] : undefined;
       const tempInfo = tempVal ? normalizeTemp(tempVal, preferredUnit) : { unit: preferredUnit };
 
-      // Collect symptoms from dedicated column or all columns
+      // Collect symptoms from dedicated column or row text
       let symptoms: string[] = [];
       if (symptomIdx >= 0 && row[symptomIdx]) {
         symptoms = extractSymptoms(row[symptomIdx]);
@@ -405,7 +481,12 @@ export function parseTrackerData(rawContent: string, preferredUnit: 'F' | 'C' = 
   };
 }
 
-// Generate sample CSV template for users to easily populate
+/**
+ * Generates an annotated sample CSV template string ready for download.
+ * Demonstrates the expected format for importing historical cycle spreadsheets.
+ *
+ * @returns CSV formatted string.
+ */
 export function generateSampleCsvTemplate(): string {
   return `Date,Flow,Temperature,Symptoms,Mood,Notes
 2026-08-10,heavy,97.2,cramps; fatigue,sensitive,Raspberry leaf tea

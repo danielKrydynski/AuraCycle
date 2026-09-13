@@ -1,3 +1,12 @@
+/**
+ * @file AnalyticsCharts.tsx
+ * @description Biomarker analytics charts using Recharts:
+ * 1. Basal Body Temperature (BBT) biphasic thermal curve with follicular baseline and luteal shift.
+ * 2. Hormonal Symptom Frequency by Cycle Phase (identifying PMS vs ovulatory vs menstrual patterns).
+ * 3. Daily Energy and Perceived Stress dual trend line.
+ * 4. Historical Cycle Length variance and period duration history.
+ */
+
 import React, { useState, useMemo } from 'react';
 import {
   ResponsiveContainer,

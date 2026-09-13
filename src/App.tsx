@@ -1,3 +1,10 @@
+/**
+ * @file App.tsx
+ * @description Main application controller and root container for AuraCycle / Cycle & Hormonal Health Tracker.
+ * Manages the encrypted storage lifecycle (AES-256-GCM), biometric/passcode authentication states,
+ * auto-lock inactivity monitoring, active tab routing, and modal workflows.
+ */
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header';
 import { LockScreen } from './components/LockScreen';

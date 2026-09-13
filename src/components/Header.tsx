@@ -1,3 +1,9 @@
+/**
+ * @file Header.tsx
+ * @description Top navigation bar component providing tab switching (Overview, Calendar, Analytics,
+ * Insights), quick action buttons for daily logging, cycle data import, privacy settings, and manual vault locking.
+ */
+
 import React from 'react';
 import { Lock, ShieldCheck, Plus, BarChart2, Calendar, Settings, Upload } from 'lucide-react';
 
