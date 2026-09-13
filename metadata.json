@@ -1,0 +1,6 @@
+{
+  "name": "Cycle & Hormonal Health Tracker",
+  "description": "Private, locally-encrypted cycle and hormonal symptom tracker with intuitive phase visualization, symptom correlation, and secure on-device storage.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
